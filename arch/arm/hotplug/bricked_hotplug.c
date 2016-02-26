@@ -32,14 +32,15 @@
 #define DEBUG 0
 
 #define MPDEC_TAG			"bricked_hotplug"
-#define HOTPLUG_ENABLED			1
-#define MSM_MPDEC_STARTDELAY		0
-#define MSM_MPDEC_DELAY			100
-#define DEFAULT_MIN_CPUS_ONLINE		4
+#define HOTPLUG_ENABLED			0
+#define MSM_MPDEC_STARTDELAY		20000
+#define MSM_MPDEC_DELAY			130
+#define DEFAULT_MIN_CPUS_ONLINE		1
 #define DEFAULT_MAX_CPUS_ONLINE		NR_CPUS
 #define DEFAULT_MAX_CPUS_ONLINE_SUSP	1
 #define DEFAULT_SUSPEND_DEFER_TIME	10
 #define DEFAULT_DOWN_LOCK_DUR		500
+
 #define MSM_MPDEC_IDLE_FREQ		422400
 
 enum {
@@ -256,9 +257,6 @@ static void bricked_hotplug_suspend(struct work_struct *work)
 {
 	int cpu;
 
-	if (!hotplug.bricked_enabled)
-		return;
-
 	mutex_lock(&hotplug.bricked_hotplug_mutex);
 	hotplug.suspended = 1;
 	hotplug.min_cpus_online_res = hotplug.min_cpus_online;
@@ -287,9 +285,6 @@ static void bricked_hotplug_suspend(struct work_struct *work)
 static void __ref bricked_hotplug_resume(struct work_struct *work)
 {
 	int cpu, required_reschedule = 0, required_wakeup = 0;
-
-	if (!hotplug.bricked_enabled)
-		return;
 
 	if (hotplug.suspended) {
 		mutex_lock(&hotplug.bricked_hotplug_mutex);
@@ -326,6 +321,9 @@ static void __ref bricked_hotplug_resume(struct work_struct *work)
 #ifdef CONFIG_POWERSUSPEND
 static void __bricked_hotplug_suspend(struct power_suspend *handler)
 {
+	if (!hotplug.bricked_enabled || hotplug.suspended)
+		return;
+
 	INIT_DELAYED_WORK(&suspend_work, bricked_hotplug_suspend);
 	queue_delayed_work_on(0, susp_wq, &suspend_work,
 			msecs_to_jiffies(hotplug.suspend_defer_time * 1000));
@@ -333,6 +331,9 @@ static void __bricked_hotplug_suspend(struct power_suspend *handler)
 
 static void __ref __bricked_hotplug_resume(struct power_suspend *handler)
 {
+	if (!hotplug.bricked_enabled)
+		return;
+
 	flush_workqueue(susp_wq);
 	cancel_delayed_work_sync(&suspend_work);
 	queue_work_on(0, susp_wq, &resume_work);
